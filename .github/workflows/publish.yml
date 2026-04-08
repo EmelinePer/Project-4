@@ -30,7 +30,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Docker requires image names to be lowercase. 
-      # This step forces the repository name (Jeroneo/Project-4) to lowercase.
       - name: Lowercase Repository Name
         run: |
           echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >>${GITHUB_ENV}
@@ -51,3 +50,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Trigger Watchtower Update
+        run: |
+          curl -H "Authorization: Bearer ${{ secrets.WATCHTOWER_TOKEN }}" ${{ secrets.WATCHTOWER_URL }}/v1/update
