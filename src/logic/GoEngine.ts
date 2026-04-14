@@ -8,6 +8,7 @@ export class GoEngine {
   consecutivePasses: number = 0; // Tracks passes to end the game
   komi: number = 6.5; // Compensation points for White
   isResigned: Player = null;
+  lastMoveIndex: number | null = null;
 
   constructor(size: number = 19) {
     this.size = size;
@@ -54,7 +55,7 @@ export class GoEngine {
     return neighbors;
   }
 
-  placeStone(index: number, player: Player): boolean {
+  placeStone(index: number, player: 'B' | 'W'): boolean {
     if (this.board[index] !== null) return false;
 
     const originalBoard = [...this.board];
@@ -94,6 +95,7 @@ export class GoEngine {
     this.history.push(stateStr);
     this.captures[player] += turnCaptures;
     this.consecutivePasses = 0; // Reset passes on valid move
+    this.lastMoveIndex = index;
     return true;
   }
 

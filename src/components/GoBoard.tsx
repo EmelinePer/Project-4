@@ -11,6 +11,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
   const [turn, setTurn] = useState<'B' | 'W'>('B');
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
   const [gameMode, setGameMode] = useState<'PvP' | 'PvAI' | 'AIvAI'>('PvAI');
+  const [lastMove, setLastMove] = useState<number | null>(null);
 
   // Trigger score update when component mounts to initialize the scoreboard
   useEffect(() => {
@@ -38,6 +39,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
 
     if (engine.placeStone(i, turn)) {
       setBoard([...engine.board]);
+      setLastMove(engine.lastMoveIndex);
       setTurn(turn === 'B' ? 'W' : 'B');
       onScoreUpdate(engine.captures.B, engine.captures.W);
     }
@@ -80,6 +82,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
     for (const move of attemptMoves) {
       if (engine.placeStone(move, currentColor)) {
         setBoard([...engine.board]);
+        setLastMove(engine.lastMoveIndex);
         setTurn(currentColor === 'B' ? 'W' : 'B');
         onScoreUpdate(engine.captures.B, engine.captures.W);
         return;
@@ -96,6 +99,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
     setEngine(newEngine);
     setBoard(newEngine.board);
     setTurn('B');
+    setLastMove(null);
   };
 
   const passTurn = () => {
@@ -173,6 +177,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
             setEngine(newEngine);
             setBoard(newEngine.board);
             setTurn('B');
+            setLastMove(null);
           }}
           style={{
             padding: '10px 15px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -249,6 +254,19 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
                     : 'radial-gradient(circle at 30% 30%, #fff, #f0f0f0 40%, #dcdcdc 80%)',
                   boxShadow: '1px 3px 5px rgba(0,0,0,0.6)', // Plus d'ombre portée pour le volume
                   zIndex: 3
+                }} />
+              )}
+
+              {cell && lastMove === i && (
+                <div style={{
+                  position: 'absolute',
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  background: cell === 'B' ? '#fff' : '#111',
+                  border: cell === 'B' ? '1px solid #111' : '1px solid #fff',
+                  zIndex: 4,
+                  boxShadow: '0 0 6px rgba(0,0,0,0.45)'
                 }} />
               )}
 
