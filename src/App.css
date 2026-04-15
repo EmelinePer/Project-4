@@ -12,11 +12,6 @@
   gap: 10px;
 }
 
-header h1 {
-  color: #2c3e50;
-  margin-bottom: 0;
-}
-
 #game-area {
   display: flex;
   justify-content: center;
