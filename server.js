@@ -61,38 +61,49 @@ function startKataGo() {
 // Boot up immediately when the server starts
 startKataGo();
 
+/**
+ * POST /api/move
+ *
+ * Accepts the GTP move history format used by the frontend and FastAPI backends:
+ *   { history: string[], board_size: number, difficulty?: string }
+ *
+ * Returns:
+ *   { ai_move: string, score: null }
+ */
 app.post('/api/move', (req, res) => {
-  const { size, board, turn } = req.body;
+  const { history, board_size: boardSize = 19, difficulty = 'medium' } = req.body;
+
+  if (!Array.isArray(history)) {
+    return res.status(400).json({ error: 'Request body must include a "history" array of GTP moves.' });
+  }
+
   if (!katagoProcess || katagoProcess.killed) startKataGo();
 
-  console.log(`Frontend requested a move for: ${turn}`);
+  // Determine whose turn it is from move history length (B plays on even turns)
+  const turn = history.filter(m => m !== 'PASS').length % 2 === 0 ? 'B' : 'W';
+  console.log(`[Server] Move request — history: ${history.length} moves, turn: ${turn}, difficulty: ${difficulty}`);
 
-  // Instruct the persistent KataGo instance to consider the current board
-  katagoProcess.stdin.write(`boardsize ${size}\n`);
+  // Reset the board and replay the full move history
+  katagoProcess.stdin.write(`boardsize ${boardSize}\n`);
   katagoProcess.stdin.write('clear_board\n');
-  
-  // Re-place all stones currently on the board
-  for (let i = 0; i < board.length; i++) {
-    if (board[i]) {
-      const x = i % size;
-      const y = Math.floor(i / size);
-      const col = String.fromCharCode(65 + (x >= 8 ? x + 1 : x)); // Skip 'I' in GTP
-      const row = size - y;
-      katagoProcess.stdin.write(`play ${board[i]} ${col}${row}\n`);
-    }
+
+  for (let idx = 0; idx < history.length; idx++) {
+    // Alternate colors: Black plays first (index 0), White second, etc.
+    const color = idx % 2 === 0 ? 'B' : 'W';
+    katagoProcess.stdin.write(`play ${color} ${history[idx]}\n`);
   }
-  
+
   // Set up the callback for when KataGo's async output buffer finds the move
   currentResolve = (finalMove) => {
-    res.json({ move: finalMove });
+    res.json({ ai_move: finalMove, score: null });
   };
-  
-  // Request a move
+
+  // Request a move for the current player
   katagoProcess.stdin.write(`genmove ${turn}\n`);
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`KataGo AI Server running on http://localhost:${PORT}`);
-  console.log(`Ready to play fast!`);
+  console.log(`Accepting history-based move requests at POST /api/move`);
 });

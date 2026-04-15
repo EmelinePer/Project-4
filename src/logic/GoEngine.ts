@@ -4,6 +4,7 @@ export class GoEngine {
   size: number;
   board: Player[];
   history: string[] = []; // For Ko Rule detection
+  moveHistory: string[] = []; // GTP move history (e.g. ["D4", "Q16", "PASS"]) for KataGo API
   captures = { B: 0, W: 0 }; // Track captured stones
   stonesRemaining = { B: 181, W: 180 }; // Track remaining pieces
   consecutivePasses: number = 0; // Tracks passes to end the game
@@ -19,6 +20,16 @@ export class GoEngine {
   // Get index from coordinates
   getIndex(x: number, y: number) {
     return y * this.size + x;
+  }
+
+  // Convert a board index to a GTP coordinate string (e.g. 0 → "A19").
+  // GTP skips the letter 'I', and rows are numbered from 1 at the bottom.
+  private indexToGtp(index: number): string {
+    const x = index % this.size;
+    const y = Math.floor(index / this.size);
+    const colChar = String.fromCharCode(65 + (x >= 8 ? x + 1 : x));
+    const row = this.size - y;
+    return `${colChar}${row}`;
   }
 
   // Find all connected stones of the same color (a "string")
@@ -95,6 +106,7 @@ export class GoEngine {
     }
     
     this.history.push(stateStr);
+    this.moveHistory.push(this.indexToGtp(index));
     this.stonesRemaining[player]--;
     this.captures[player] += turnCaptures;
     this.consecutivePasses = 0; // Reset passes on valid move
@@ -104,6 +116,7 @@ export class GoEngine {
 
   passTurn(): void {
     this.consecutivePasses++;
+    this.moveHistory.push('PASS');
     this.history.push("PASS_" + this.history.length); // Add distinct state for Ko history pacing
   }
 
