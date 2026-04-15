@@ -1,10 +1,7 @@
-import { useState } from 'react'
 import GoBoard from './components/GoBoard'
 import './App.css'
 
 function App() {
-  const [, setScores] = useState({ black: 0, white: 0 });
-
   return (
     <div className="main-container">
       <header style={{ textAlign: 'center', marginBottom: '20px' }}>
@@ -17,7 +14,7 @@ function App() {
       </header>
 
       <section id="game-area">
-        <GoBoard onScoreUpdate={(b, w) => setScores({ black: b, white: w })} />
+        <GoBoard />
       </section>
 
       <footer>

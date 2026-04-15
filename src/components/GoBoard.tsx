@@ -1,12 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { GoEngine } from "../logic/GoEngine";
 import { requestKataGoMove, gtpToBoardIndex } from "../services/katagoService";
 
-interface GoBoardProps {
-  onScoreUpdate: (blackCaptures: number, whiteCaptures: number) => void;
-}
-
-const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
+const GoBoard = () => {
   const [engine, setEngine] = useState(() => new GoEngine(19));
   const [board, setBoard] = useState(engine.board);
   const [turn, setTurn] = useState<'B' | 'W'>('B');
@@ -14,11 +10,6 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
   const [gameMode, setGameMode] = useState<'PvP' | 'PvAI' | 'AIvAI'>('PvAI');
   const [lastMove, setLastMove] = useState<number | null>(null);
   const [showWinnerModal, setShowWinnerModal] = useState(false);
-
-  // Trigger score update when component mounts to initialize the scoreboard
-  useEffect(() => {
-    onScoreUpdate(engine.captures.B, engine.captures.W);
-  }, [engine, onScoreUpdate]);
 
   useEffect(() => {
     if (engine.isGameOver()) {
@@ -46,7 +37,6 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
       setBoard([...engine.board]);
       setLastMove(engine.lastMoveIndex);
       setTurn(turn === 'B' ? 'W' : 'B');
-      onScoreUpdate(engine.captures.B, engine.captures.W);
     }
   };
 
@@ -71,7 +61,6 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
         setBoard([...engine.board]);
         setLastMove(engine.lastMoveIndex);
         setTurn(currentColor === 'B' ? 'W' : 'B');
-        onScoreUpdate(engine.captures.B, engine.captures.W);
         return;
       }
 
@@ -125,7 +114,6 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
         setBoard([...engine.board]);
         setLastMove(engine.lastMoveIndex);
         setTurn(currentColor === 'B' ? 'W' : 'B');
-        onScoreUpdate(engine.captures.B, engine.captures.W);
         return;
       }
     }
