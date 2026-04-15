@@ -3,7 +3,7 @@ import GoBoard from './components/GoBoard'
 import './App.css'
 
 function App() {
-  const [scores, setScores] = useState({ black: 0, white: 0 });
+  const [, setScores] = useState({ black: 0, white: 0 });
 
   return (
     <div className="main-container">

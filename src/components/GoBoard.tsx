@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { GoEngine } from "../logic/GoEngine";
+import { requestKataGoMove, gtpToBoardIndex } from "../services/katagoService";
 
 interface GoBoardProps {
   onScoreUpdate: (blackCaptures: number, whiteCaptures: number) => void;
@@ -51,56 +52,74 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
 
   const aiMove = async (currentColor: 'B' | 'W') => {
     try {
-      const response = await fetch('http://localhost:3001/api/move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          size: 19,
-          board: engine.board,
-          turn: currentColor
-        })
-      });
+      const gtpMove = await requestKataGoMove(
+        engine.moveHistory,
+        'medium',
+        engine.size
+      );
 
-      if (response.ok) {
-        const data = await response.json();
-        const move = data.move; // e.g. "D4" or "PASS"
-        
-        if (move.toUpperCase() === 'PASS') {
-          engine.passTurn();
-          setTurn(currentColor === 'B' ? 'W' : 'B');
-          return;
-        }
-
-        // Convert GTP move to board index
-        const colStr = move.charAt(0).toUpperCase();
-        const rowStr = move.slice(1);
-        let x = colStr.charCodeAt(0) - 65;
-        if (x >= 8) x -= 1; // 'I' is skipped in GTP
-        const y = 19 - parseInt(rowStr, 10);
-        
-        const index = y * 19 + x;
-
-        if (engine.placeStone(index, currentColor)) {
-          setBoard([...engine.board]);
-          setLastMove(engine.lastMoveIndex);
-          setTurn(currentColor === 'B' ? 'W' : 'B');
-          onScoreUpdate(engine.captures.B, engine.captures.W);
-          return;
-        }
+      if (gtpMove.toUpperCase() === 'PASS') {
+        engine.passTurn();
+        setTurn(currentColor === 'B' ? 'W' : 'B');
+        return;
       }
+
+      // Convert GTP coordinate to board index
+      const index = gtpToBoardIndex(gtpMove, engine.size);
+
+      if (index !== -1 && engine.placeStone(index, currentColor)) {
+        setBoard([...engine.board]);
+        setLastMove(engine.lastMoveIndex);
+        setTurn(currentColor === 'B' ? 'W' : 'B');
+        onScoreUpdate(engine.captures.B, engine.captures.W);
+        return;
+      }
+
+      console.warn(`[KataGo] Received invalid or illegal move: "${gtpMove}" (index: ${index}). Using heuristic fallback.`);
     } catch (error) {
-      console.warn("Could not connect to KataGo AI server. Falling back to simple heuristic.", error);
+      console.warn('[KataGo] Could not reach KataGo backend. Using heuristic fallback.', error);
     }
 
-    // Fallback: simple random legal move if API fails
-    const emptyIndices = engine.board.map((v, i) => v === null ? i : null).filter(v => v !== null) as number[];
+    // Fallback: heuristic move selection when the backend is unavailable
+    const captureMoves: number[] = [];
+    const defenseMoves: number[] = [];
+    const proximityMoves: number[] = [];
+
+    for (let i = 0; i < engine.board.length; i++) {
+      const color = engine.board[i];
+      if (color) {
+        const { liberties } = engine.getGroup(i);
+        if (liberties.size === 1) {
+          const criticalSpot = Array.from(liberties)[0];
+          if (color !== currentColor) captureMoves.push(criticalSpot);
+          if (color === currentColor) defenseMoves.push(criticalSpot);
+        }
+      }
+    }
+
+    const emptyIndices = engine.board
+      .map((v, i) => (v === null ? i : null))
+      .filter((v): v is number => v !== null);
+
     if (emptyIndices.length === 0) {
       engine.passTurn();
       setTurn(currentColor === 'B' ? 'W' : 'B');
       return;
     }
 
-    const attemptMoves = emptyIndices.sort(() => Math.random() - 0.5);
+    for (const idx of emptyIndices) {
+      if (engine.getNeighbors(idx).some(n => engine.board[n] !== null)) {
+        proximityMoves.push(idx);
+      }
+    }
+
+    const attemptMoves = [
+      ...captureMoves.sort(() => Math.random() - 0.5),
+      ...defenseMoves.sort(() => Math.random() - 0.5),
+      ...proximityMoves.sort(() => Math.random() - 0.5),
+      ...emptyIndices.sort(() => Math.random() - 0.5)
+    ];
+
     for (const move of attemptMoves) {
       if (engine.placeStone(move, currentColor)) {
         setBoard([...engine.board]);
@@ -111,6 +130,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
       }
     }
 
+    // No valid move found – pass the turn
     engine.passTurn();
     setTurn(currentColor === 'B' ? 'W' : 'B');
   };
