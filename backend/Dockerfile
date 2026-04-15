@@ -1,0 +1,45 @@
+FROM python:3.11-slim-bullseye
+
+# 1. Install system dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    unzip \
+    libzip-dev \
+    zlib1g-dev \
+    libgomp1 \
+    libssl1.1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 2. Fix the missing libzip.so.5 error
+RUN wget -q http://mirrors.kernel.org/ubuntu/pool/universe/libz/libzip/libzip5_1.5.1-0ubuntu1_amd64.deb \
+    && apt-get update \
+    && apt-get install -y ./libzip5_1.5.1-0ubuntu1_amd64.deb \
+    && rm libzip5_1.5.1-0ubuntu1_amd64.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. Download KataGo (Eigen CPU version — works without GPU drivers)
+RUN wget -q https://github.com/lightvector/KataGo/releases/download/v1.14.1/katago-v1.14.1-eigen-linux-x64.zip -O katago.zip \
+    && unzip katago.zip \
+    && chmod +x katago \
+    && rm katago.zip
+
+# 4. Download a neural network model directly from GitHub Releases (bypasses Cloudflare)
+RUN wget -q https://github.com/lightvector/KataGo/releases/download/v1.4.5/g170e-b20c256x2-s5303129600-d1228401921.bin.gz -O model.bin.gz
+
+# 5. Copy GTP configuration
+COPY gtp_config.cfg .
+
+# 6. Copy Python requirements and install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 7. Copy backend application
+COPY app.py .
+
+EXPOSE 8000
+
+# 8. Start the FastAPI server
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,14 +1,12 @@
 version: '3.8'
 
 services:
-  go-ai-server:
+  katago-api:
     build: .
     ports:
       - "8000:8000"
     restart: unless-stopped
-    environment:
-      - NODE_ENV=production
-    # If your laptop or server has a GPU, you can enable it below, but for now it uses the CPU
+    # Uncomment below to enable GPU support (requires nvidia-container-toolkit)
     # deploy:
     #   resources:
     #     reservations:
