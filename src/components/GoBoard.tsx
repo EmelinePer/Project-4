@@ -49,40 +49,58 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
     }
   };
 
-  const aiMove = (currentColor: 'B' | 'W') => {
-    const captureMoves: number[] = [];
-    const defenseMoves: number[] = [];
-    const proximityMoves: number[] = [];
+  const aiMove = async (currentColor: 'B' | 'W') => {
+    try {
+      const response = await fetch('http://localhost:3001/api/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          size: 19,
+          board: engine.board,
+          turn: currentColor
+        })
+      });
 
-    // Analyze board to find critical spots (groups with 1 liberty)
-    for (let i = 0; i < engine.board.length; i++) {
-      const color = engine.board[i];
-      if (color) {
-        const { liberties } = engine.getGroup(i);
-        if (liberties.size === 1) {
-          const criticalSpot = Array.from(liberties)[0];
-          if (color !== currentColor) captureMoves.push(criticalSpot); // Capture opponent
-          if (color === currentColor) defenseMoves.push(criticalSpot); // Save own pieces
+      if (response.ok) {
+        const data = await response.json();
+        const move = data.move; // e.g. "D4" or "PASS"
+        
+        if (move.toUpperCase() === 'PASS') {
+          engine.passTurn();
+          setTurn(currentColor === 'B' ? 'W' : 'B');
+          return;
+        }
+
+        // Convert GTP move to board index
+        const colStr = move.charAt(0).toUpperCase();
+        const rowStr = move.slice(1);
+        let x = colStr.charCodeAt(0) - 65;
+        if (x >= 8) x -= 1; // 'I' is skipped in GTP
+        const y = 19 - parseInt(rowStr, 10);
+        
+        const index = y * 19 + x;
+
+        if (engine.placeStone(index, currentColor)) {
+          setBoard([...engine.board]);
+          setLastMove(engine.lastMoveIndex);
+          setTurn(currentColor === 'B' ? 'W' : 'B');
+          onScoreUpdate(engine.captures.B, engine.captures.W);
+          return;
         }
       }
+    } catch (error) {
+      console.warn("Could not connect to KataGo AI server. Falling back to simple heuristic.", error);
     }
 
+    // Fallback: simple random legal move if API fails
     const emptyIndices = engine.board.map((v, i) => v === null ? i : null).filter(v => v !== null) as number[];
-    if (emptyIndices.length === 0) return;
-
-    for (const idx of emptyIndices) {
-      if (engine.getNeighbors(idx).some(n => engine.board[n] !== null)) {
-        proximityMoves.push(idx);
-      }
+    if (emptyIndices.length === 0) {
+      engine.passTurn();
+      setTurn(currentColor === 'B' ? 'W' : 'B');
+      return;
     }
 
-    const attemptMoves = [
-      ...captureMoves.sort(() => Math.random() - 0.5),
-      ...defenseMoves.sort(() => Math.random() - 0.5),
-      ...proximityMoves.sort(() => Math.random() - 0.5),
-      ...emptyIndices.sort(() => Math.random() - 0.5)
-    ];
-
+    const attemptMoves = emptyIndices.sort(() => Math.random() - 0.5);
     for (const move of attemptMoves) {
       if (engine.placeStone(move, currentColor)) {
         setBoard([...engine.board]);
@@ -93,7 +111,6 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
       }
     }
 
-    // SI AUCUN COUP VALIDE -> L'IA PASSE
     engine.passTurn();
     setTurn(currentColor === 'B' ? 'W' : 'B');
   };
@@ -140,12 +157,12 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
         <button 
           onClick={resetGame}
           style={{ 
-            padding: '10px 25px', background: 'rgba(97, 239, 68, 0.1)', border: '1px solid rgba(125, 239, 68, 0.3)', 
+            padding: '10px 25px', background: 'rgba(97, 239, 68, 0.07)', border: '1px solid rgba(125, 239, 68, 0.3)', 
             color: '#c3fca5', cursor: 'pointer', fontSize: '1rem', fontWeight: '500', borderRadius: '30px',
             transition: 'all 0.2s ease-in-out'
           }}
-          onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-          onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(97, 239, 68, 0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+          onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(97, 239, 68, 0.07)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
           New Game
         </button>

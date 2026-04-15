@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  go-ai-server:
+    build: .
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    # If your laptop or server has a GPU, you can enable it below, but for now it uses the CPU
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
