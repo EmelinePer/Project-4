@@ -20,6 +20,10 @@ RUN wget https://github.com/lightvector/KataGo/releases/download/v1.15.3/katago-
 RUN mkdir -p /app/models \
     && wget https://github.com/lightvector/KataGo/releases/download/v1.12.4/b18c384nbt-uec.bin.gz -O /app/models/model.bin.gz
 
+# Create a minimal GTP config so KataGo can start without crashing.
+# All unset parameters use KataGo's built-in defaults.
+RUN echo "numSearchThreads = 1" > /app/gtp_config.cfg
+
 # Copy package info and install the backend dependencies
 COPY package*.json ./
 RUN npm install express cors
@@ -27,6 +31,6 @@ RUN npm install express cors
 # Copy the server file
 COPY server.js ./
 
-EXPOSE 3001
+EXPOSE 8000
 
 CMD ["node", "server.js"]

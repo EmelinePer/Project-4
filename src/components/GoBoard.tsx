@@ -1,12 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { GoEngine } from "../logic/GoEngine";
 import { requestKataGoMove, gtpToBoardIndex } from "../services/katagoService";
 
-interface GoBoardProps {
-  onScoreUpdate: (blackCaptures: number, whiteCaptures: number) => void;
-}
-
-const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
+const GoBoard = () => {
   const [engine, setEngine] = useState(() => new GoEngine(19));
   const [board, setBoard] = useState(engine.board);
   const [turn, setTurn] = useState<'B' | 'W'>('B');
@@ -14,11 +10,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
   const [gameMode, setGameMode] = useState<'PvP' | 'PvAI' | 'AIvAI'>('PvAI');
   const [lastMove, setLastMove] = useState<number | null>(null);
   const [showWinnerModal, setShowWinnerModal] = useState(false);
-
-  // Trigger score update when component mounts to initialize the scoreboard
-  useEffect(() => {
-    onScoreUpdate(engine.captures.B, engine.captures.W);
-  }, [engine, onScoreUpdate]);
+  const [usingHeuristic, setUsingHeuristic] = useState(false);
 
   useEffect(() => {
     if (engine.isGameOver()) {
@@ -46,7 +38,6 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
       setBoard([...engine.board]);
       setLastMove(engine.lastMoveIndex);
       setTurn(turn === 'B' ? 'W' : 'B');
-      onScoreUpdate(engine.captures.B, engine.captures.W);
     }
   };
 
@@ -59,6 +50,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
       );
 
       if (gtpMove.toUpperCase() === 'PASS') {
+        setUsingHeuristic(false);
         engine.passTurn();
         setTurn(currentColor === 'B' ? 'W' : 'B');
         return;
@@ -68,10 +60,10 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
       const index = gtpToBoardIndex(gtpMove, engine.size);
 
       if (index !== -1 && engine.placeStone(index, currentColor)) {
+        setUsingHeuristic(false);
         setBoard([...engine.board]);
         setLastMove(engine.lastMoveIndex);
         setTurn(currentColor === 'B' ? 'W' : 'B');
-        onScoreUpdate(engine.captures.B, engine.captures.W);
         return;
       }
 
@@ -81,6 +73,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
     }
 
     // Fallback: heuristic move selection when the backend is unavailable
+    setUsingHeuristic(true);
     const captureMoves: number[] = [];
     const defenseMoves: number[] = [];
     const proximityMoves: number[] = [];
@@ -125,7 +118,6 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
         setBoard([...engine.board]);
         setLastMove(engine.lastMoveIndex);
         setTurn(currentColor === 'B' ? 'W' : 'B');
-        onScoreUpdate(engine.captures.B, engine.captures.W);
         return;
       }
     }
@@ -142,6 +134,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
     setTurn('B');
     setLastMove(null);
     setShowWinnerModal(false);
+    setUsingHeuristic(false);
   };
 
   const closeModal = () => {
@@ -224,6 +217,7 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
             setBoard(newEngine.board);
             setTurn('B');
             setLastMove(null);
+            setUsingHeuristic(false);
           }}
           style={{
             padding: '10px 15px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -235,6 +229,22 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
           <option value="AIvAI" style={{ background: '#222' }}>🖥️ AI vs AI</option>
         </select>
       </div>
+
+      {/* HEURISTIC FALLBACK NOTICE */}
+      {usingHeuristic && (gameMode === 'PvAI' || gameMode === 'AIvAI') && (
+        <div style={{
+          padding: '10px 20px',
+          background: 'rgba(234, 179, 8, 0.12)',
+          border: '1px solid rgba(234, 179, 8, 0.4)',
+          borderRadius: '12px',
+          color: '#fde68a',
+          fontSize: '0.95rem',
+          textAlign: 'center',
+          maxWidth: '600px'
+        }}>
+          ⚠️ KataGo AI is unavailable — the AI is currently using a heuristic fallback strategy.
+        </div>
+      )}
 
       {/* WINNER POPUP MODAL */}
       {showWinnerModal && finalScore && (
