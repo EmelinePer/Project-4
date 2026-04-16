@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { GoEngine } from "../logic/GoEngine";
 import { requestKataGoMove, gtpToBoardIndex } from "../services/katagoService";
 
@@ -8,9 +8,12 @@ const GoBoard = () => {
   const [turn, setTurn] = useState<'B' | 'W'>('B');
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
   const [gameMode, setGameMode] = useState<'PvP' | 'PvAI' | 'AIvAI'>('PvAI');
+  const [aiDifficulty, setAiDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [lastMove, setLastMove] = useState<number | null>(null);
   const [showWinnerModal, setShowWinnerModal] = useState(false);
   const [usingHeuristic, setUsingHeuristic] = useState(false);
+  const aiRequestToken = useRef(0);
+  const [isAiThinking, setIsAiThinking] = useState(false);
 
   useEffect(() => {
     if (engine.isGameOver()) {
@@ -22,11 +25,11 @@ const GoBoard = () => {
     if (gameMode === 'AIvAI') isAITurn = true;
     if (gameMode === 'PvAI' && turn === 'W') isAITurn = true;
 
-    if (isAITurn) {
-      const timer = setTimeout(() => aiMove(turn), 600);
+    if (isAITurn && !isAiThinking) {
+      const timer = setTimeout(() => aiMove(turn), 150);
       return () => clearTimeout(timer);
     }
-  }, [turn, gameMode, board, engine]);
+  }, [turn, gameMode, board, engine, aiDifficulty, isAiThinking]);
 
   const handleClick = (i: number) => {
     if (engine.isGameOver()) return; // Bloquer les clics si c'est fini
@@ -42,28 +45,43 @@ const GoBoard = () => {
   };
 
   const aiMove = async (currentColor: 'B' | 'W') => {
+    const requestToken = ++aiRequestToken.current;
+    setIsAiThinking(true);
+
     try {
+      if (engine.isGameOver()) {
+        setIsAiThinking(false);
+        return;
+      }
+
       const gtpMove = await requestKataGoMove(
         engine.moveHistory,
-        'medium',
+        aiDifficulty,
         engine.size
       );
+
+      if (requestToken !== aiRequestToken.current || engine.isGameOver()) {
+        setIsAiThinking(false);
+        return;
+      }
 
       if (gtpMove.toUpperCase() === 'PASS') {
         setUsingHeuristic(false);
         engine.passTurn();
         setTurn(currentColor === 'B' ? 'W' : 'B');
+        setIsAiThinking(false);
         return;
       }
 
       // Convert GTP coordinate to board index
       const index = gtpToBoardIndex(gtpMove, engine.size);
 
-      if (index !== -1 && engine.placeStone(index, currentColor)) {
+      if (index !== -1 && engine.board[index] === null && engine.placeStone(index, currentColor)) {
         setUsingHeuristic(false);
         setBoard([...engine.board]);
         setLastMove(engine.lastMoveIndex);
         setTurn(currentColor === 'B' ? 'W' : 'B');
+        setIsAiThinking(false);
         return;
       }
 
@@ -72,7 +90,12 @@ const GoBoard = () => {
       console.warn('[KataGo] Could not reach KataGo backend. Using heuristic fallback.', error);
     }
 
-    // Fallback: heuristic move selection when the backend is unavailable
+    if (requestToken !== aiRequestToken.current || engine.isGameOver()) {
+      setIsAiThinking(false);
+      return;
+    }
+
+    // Fallback: heuristic move selection when the backend is unavailable or illegal.
     setUsingHeuristic(true);
     const captureMoves: number[] = [];
     const defenseMoves: number[] = [];
@@ -97,6 +120,7 @@ const GoBoard = () => {
     if (emptyIndices.length === 0) {
       engine.passTurn();
       setTurn(currentColor === 'B' ? 'W' : 'B');
+      setIsAiThinking(false);
       return;
     }
 
@@ -118,6 +142,7 @@ const GoBoard = () => {
         setBoard([...engine.board]);
         setLastMove(engine.lastMoveIndex);
         setTurn(currentColor === 'B' ? 'W' : 'B');
+        setIsAiThinking(false);
         return;
       }
     }
@@ -125,9 +150,11 @@ const GoBoard = () => {
     // No valid move found – pass the turn
     engine.passTurn();
     setTurn(currentColor === 'B' ? 'W' : 'B');
+    setIsAiThinking(false);
   };
 
   const resetGame = () => {
+    aiRequestToken.current += 1;
     const newEngine = new GoEngine(19);
     setEngine(newEngine);
     setBoard(newEngine.board);
@@ -135,6 +162,7 @@ const GoBoard = () => {
     setLastMove(null);
     setShowWinnerModal(false);
     setUsingHeuristic(false);
+    setIsAiThinking(false);
   };
 
   const closeModal = () => {
@@ -211,6 +239,7 @@ const GoBoard = () => {
         <select
           value={gameMode}
           onChange={(e) => {
+            aiRequestToken.current += 1;
             setGameMode(e.target.value as any);
             const newEngine = new GoEngine(19);
             setEngine(newEngine);
@@ -218,6 +247,7 @@ const GoBoard = () => {
             setTurn('B');
             setLastMove(null);
             setUsingHeuristic(false);
+            setIsAiThinking(false);
           }}
           style={{
             padding: '10px 15px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -227,6 +257,19 @@ const GoBoard = () => {
           <option value="PvP" style={{ background: '#222' }}>👤 Player vs Player</option>
           <option value="PvAI" style={{ background: '#222' }}>🤖 Player vs AI</option>
           <option value="AIvAI" style={{ background: '#222' }}>🖥️ AI vs AI</option>
+        </select>
+
+        <select
+          value={aiDifficulty}
+          onChange={(e) => setAiDifficulty(e.target.value as 'easy' | 'medium' | 'hard')}
+          style={{
+            padding: '10px 15px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
+            color: '#e5e5e5', fontSize: '1rem', fontWeight: '500', borderRadius: '30px', outline: 'none', cursor: 'pointer'
+          }}
+        >
+          <option value="easy" style={{ background: '#222' }}>⚡ Easy</option>
+          <option value="medium" style={{ background: '#222' }}>🎯 Medium</option>
+          <option value="hard" style={{ background: '#222' }}>♟️ Hard</option>
         </select>
       </div>
 

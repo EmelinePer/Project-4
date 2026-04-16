@@ -52,6 +52,17 @@ docker-compose up --build
 
 This starts the Node.js KataGo server on **port 8000**.
 
+The server now accepts optional environment variables to tune strength and speed:
+
+```env
+KATAGO_DEFAULT_MAX_VISITS=120
+KATAGO_EASY_VISITS=40
+KATAGO_MEDIUM_VISITS=120
+KATAGO_HARD_VISITS=320
+```
+
+Higher values play stronger but take longer to respond.
+
 ### Option 2 – Manual (Node.js server)
 
 1. Make sure KataGo is installed and its binary path is set via the `KATAGO_PATH` environment variable (default: `/app/katago_dir/katago`).
@@ -89,6 +100,7 @@ VITE_KATAGO_BACKEND_URL=http://localhost:8000
 ```
 
 The frontend will automatically use the configured URL when requesting AI moves.
+You can also choose the AI difficulty from the board controls in the app.
 
 ---
 

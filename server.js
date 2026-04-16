@@ -11,6 +11,12 @@ const KATAGO_PATH = process.env.KATAGO_PATH || '/app/katago_dir/katago';
 const MODEL_PATH = process.env.MODEL_PATH || '/app/models/model.bin.gz';
 const CONFIG_PATH = process.env.CONFIG_PATH || '/app/gtp_config.cfg';
 const MOVE_TIMEOUT_MS = 30000; // 30-second timeout per move request
+const DEFAULT_MAX_VISITS = Number(process.env.KATAGO_DEFAULT_MAX_VISITS || 120);
+const VISITS_BY_DIFFICULTY = {
+  easy: Number(process.env.KATAGO_EASY_VISITS || 40),
+  medium: Number(process.env.KATAGO_MEDIUM_VISITS || 120),
+  hard: Number(process.env.KATAGO_HARD_VISITS || 320),
+};
 
 let katagoProcess = null;
 
@@ -38,8 +44,8 @@ function startKataGo() {
     console.error(`KataGo stderr: ${data}`);
   });
 
-  // Limit KataGo so it doesn't take 20 seconds searching deep into the future on a CPU
-  katagoProcess.stdin.write('kata-set-param maxVisits 50\n');
+  // Use a reasonable default search budget; the request-specific value can override it.
+  katagoProcess.stdin.write(`kata-set-param maxVisits ${DEFAULT_MAX_VISITS}\n`);
 }
 
 /**
@@ -123,8 +129,7 @@ app.post('/api/move', (req, res) => {
 
   if (!katagoProcess || katagoProcess.killed) startKataGo();
 
-  const visitsMap = { easy: 10, medium: 50, hard: 200 };
-  const maxVisits = visitsMap[difficulty] || 50;
+  const maxVisits = VISITS_BY_DIFFICULTY[difficulty] ?? DEFAULT_MAX_VISITS;
 
   // Determine whose turn it is — in GTP, PASS alternates turns like any other move,
   // so history.length (including PASSes) correctly tracks whose turn it is.
