@@ -57,7 +57,7 @@ interface KataGoResponse {
  */
 export async function requestKataGoMove(
   history: string[],
-  difficulty: string = 'medium',
+  difficulty: string = 'difficult',
   boardSize: number = 19
 ): Promise<string> {
   console.log(`[KataGo] Requesting move (history length: ${history.length}, difficulty: ${difficulty})`);

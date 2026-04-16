@@ -22,7 +22,14 @@ RUN mkdir -p /app/models \
 
 # Create a minimal GTP config so KataGo can start without crashing.
 # All unset parameters use KataGo's built-in defaults.
-RUN echo "numSearchThreads = 1" > /app/gtp_config.cfg
+RUN echo "logAllGTPCommunication = false\n\
+logSearchInfo = false\n\
+numSearchThreads = 4\n\
+ponderingEnabled = false\n\
+koRule = POSITIONAL\n\
+scoringRule = AREA\n\
+taxRule = NONE\n\
+multiStoneSuicideLegal = false\n" > gtp_config.cfg
 
 # Copy package info and install the backend dependencies
 COPY package*.json ./
