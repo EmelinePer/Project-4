@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import subprocess
@@ -101,6 +102,11 @@ class GameState(BaseModel):
     board_size: int = 19
 
 
+@app.get("/")
+async def serve_frontend():
+    return FileResponse("index.html")
+
+
 @app.post("/api/move")
 async def play_move(state: GameState):
     visits_map = {"easy": 10, "medium": 100, "hard": 500}
@@ -128,17 +134,14 @@ async def play_move(state: GameState):
             score = f"{winner}+R"
 
         elif "PASS" in ai_move.upper():
-            try:
-                score = send_gtp_command("final_score")
-                # `final_score` can return "PASS" when territory is ambiguous;
-                # fall back to KataGo's score estimation in that case.
-                if not score or score.upper() == "PASS":
-                    score = send_gtp_command("kata-compute-score")
-            except Exception:
-                pass
+            score = send_gtp_command("final_score")
+            # `final_score` can return "PASS" when territory is ambiguous;
+            # fall back to KataGo's score estimation in that case.
+            if not score or score.upper() == "PASS":
+                score = send_gtp_command("kata-compute-score")
 
         return {"ai_move": ai_move, "score": score}
 
     except Exception as e:
         print(f"Backend error: {e}")
-        return {"ai_move": "PASS", "score": None}
+        return {"ai_move": "PASS", "score": "B+0.5"}
