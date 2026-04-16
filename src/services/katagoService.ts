@@ -5,19 +5,6 @@ const KATAGO_BACKEND_URL =
     .VITE_KATAGO_BACKEND_URL ?? 'http://localhost:8000';
 
 /**
- * Converts a board index to a GTP coordinate string (e.g., 0 → "A19").
- * GTP convention: columns use A-H then J-T (skipping 'I'), rows count from bottom.
- */
-export function boardIndexToGtp(index: number, size: number): string {
-  const x = index % size;
-  const y = Math.floor(index / size);
-  // Skip letter 'I' in GTP column notation
-  const colChar = String.fromCharCode(65 + (x >= 8 ? x + 1 : x));
-  const row = size - y; // GTP rows count from 1 at the bottom
-  return `${colChar}${row}`;
-}
-
-/**
  * Converts a GTP coordinate string to a board index (e.g., "A19" → 0).
  * Returns -1 for a PASS move or an invalid/out-of-range coordinate.
  */
