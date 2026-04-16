@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 app = FastAPI()
 
@@ -29,6 +30,7 @@ KATAGO_CMD = [
 # Without this, concurrent requests corrupt the stdin/stdout pipe.
 katago_lock = threading.Lock()
 katago_process = None
+FRONTEND_INDEX = Path(__file__).resolve().parent.parent / "index.html"
 
 
 def start_katago() -> subprocess.Popen:
@@ -104,7 +106,7 @@ class GameState(BaseModel):
 
 @app.get("/")
 async def serve_frontend():
-    return FileResponse("index.html")
+    return FileResponse(FRONTEND_INDEX)
 
 
 @app.post("/api/move")
