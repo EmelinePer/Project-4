@@ -9,6 +9,7 @@ app.use(express.json());
 // NOTE: The paths below correspond to where Docker installs the files
 const KATAGO_PATH = process.env.KATAGO_PATH || '/app/katago_dir/katago';
 const MODEL_PATH = process.env.MODEL_PATH || '/app/models/model.bin.gz';
+const CONFIG_PATH = process.env.CONFIG_PATH || '/app/gtp_config.cfg';
 const MOVE_TIMEOUT_MS = 30000; // 30-second timeout per move request
 
 let katagoProcess = null;
@@ -22,7 +23,7 @@ function startKataGo() {
   if (katagoProcess && !katagoProcess.killed) return;
   console.log("Booting up KataGo Engine (Singleton)...");
 
-  katagoProcess = spawn(KATAGO_PATH, ['gtp', '-model', MODEL_PATH]);
+  katagoProcess = spawn(KATAGO_PATH, ['gtp', '-model', MODEL_PATH, '-config', CONFIG_PATH]);
 
   katagoProcess.on('error', (err) => {
     console.error('KataGo Process Error:', err);
