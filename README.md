@@ -64,9 +64,15 @@ node server.js
 
 The server listens on port `8000` by default (override with the `PORT` env variable).
 
-### Option 3 – Python FastAPI Backend (go_game_browser)
+### Option 3 – Python FastAPI Backend (in this repo)
 
-You can also use the Python FastAPI backend from [Jeroneo/go_game_browser](https://github.com/Jeroneo/go_game_browser). Follow the setup instructions in that repository, then point the frontend at the running server.
+A FastAPI KataGo backend is available at `backend/app.py`.
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8000
+```
 
 ### Configuring the Frontend
 
@@ -124,4 +130,3 @@ The frontend expects the KataGo backend to implement the following endpoint:
 * `src/logic/GoEngine.ts`: The underlying logic handling captures, legal moves, scoring, and game state.
 * `src/services/katagoService.ts`: Service module for KataGo API communication and GTP coordinate utilities.
 * `server.js`: Node.js KataGo GTP wrapper server (used when running without a Python FastAPI backend).
-
