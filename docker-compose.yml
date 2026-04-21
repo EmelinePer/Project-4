@@ -16,6 +16,7 @@ services:
       target: frontend-dev
     environment:
       - VITE_KATAGO_BACKEND_URL=/api
+      - VITE_KATAGO_PROXY_TARGET=http://backend:8000
     depends_on:
       - backend
     restart: unless-stopped
