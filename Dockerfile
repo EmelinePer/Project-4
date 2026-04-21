@@ -17,7 +17,7 @@ FROM node:20-bookworm AS backend
 WORKDIR /app
 
 # Install required dependencies for KataGo runtime.
-RUN apt-get update && apt-get install -y wget unzip libgomp1 ca-certificates \
+RUN apt-get update && apt-get install -y wget unzip libgomp1 libzip-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Download KataGo (Eigen version for broad CPU compatibility without needing GPU drivers)
