@@ -5,9 +5,10 @@ const KATAGO_BACKEND_URL =
     .VITE_KATAGO_BACKEND_URL ?? 'http://localhost:8000';
 // Supports both a backend host (e.g. http://localhost:8000) and a proxied base
 // path (e.g. /api when running frontend in Docker Compose).
-const MOVE_ENDPOINT = KATAGO_BACKEND_URL.endsWith('/api')
-  ? `${KATAGO_BACKEND_URL}/move`
-  : `${KATAGO_BACKEND_URL}/api/move`;
+const NORMALIZED_BACKEND_URL = KATAGO_BACKEND_URL.replace(/\/+$/, '');
+const MOVE_ENDPOINT = NORMALIZED_BACKEND_URL.endsWith('/api')
+  ? `${NORMALIZED_BACKEND_URL}/move`
+  : `${NORMALIZED_BACKEND_URL}/api/move`;
 
 /**
  * Converts a GTP coordinate string to a board index (e.g., "A19" → 0).

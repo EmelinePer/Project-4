@@ -41,7 +41,7 @@ taxRule = NONE\n\
 multiStoneSuicideLegal = false\n" > gtp_config.cfg
 
 COPY package*.json ./
-RUN npm install --omit=dev express cors
+RUN npm ci --omit=dev
 
 COPY server.js ./
 
