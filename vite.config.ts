@@ -7,6 +7,7 @@ const proxyTarget = process.env.VITE_KATAGO_PROXY_TARGET || 'http://localhost:80
 export default defineConfig({
   plugins: [react()],
   server: {
+    allowedHosts: ['go-to-win.yepapp.org'],
     proxy: {
       '/api': {
         target: proxyTarget,
