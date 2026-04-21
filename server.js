@@ -144,7 +144,7 @@ function sendGtpCommands(commands) {
     } catch (err) {
       clearTimeout(timeout);
       katagoProcess.stdout.removeListener('data', onData);
-      reject(err);
+      return reject(err);
     }
   });
 }
