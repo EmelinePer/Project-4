@@ -24,6 +24,30 @@ let katagoProcess = null;
 // stdout pipe corruption when concurrent HTTP requests arrive.
 let requestQueue = Promise.resolve();
 
+function isKataGoWritable() {
+  return Boolean(
+    katagoProcess &&
+    katagoProcess.stdin &&
+    !katagoProcess.stdin.destroyed &&
+    katagoProcess.stdin.writable
+  );
+}
+
+function getKataGoStdinState() {
+  if (!katagoProcess) return 'process_not_initialized';
+  if (!katagoProcess.stdin) return 'stdin_missing';
+  if (katagoProcess.stdin.destroyed) return 'stdin_destroyed';
+  if (!katagoProcess.stdin.writable) return 'stdin_not_writable';
+  return 'writable';
+}
+
+function writeKataGoCommand(command) {
+  if (!isKataGoWritable()) {
+    throw new Error(`KataGo stdin is not writable (${getKataGoStdinState()})`);
+  }
+  katagoProcess.stdin.write(`${command}\n`);
+}
+
 // Keep KataGo running persistently across moves! Starting it up takes multiple seconds.
 function startKataGo() {
   if (katagoProcess && !katagoProcess.killed) return;
@@ -39,13 +63,20 @@ function startKataGo() {
     console.error(`KataGo Process Exited with code ${code}`);
     katagoProcess = null;
   });
+  katagoProcess.stdin.on('error', (err) => {
+    console.error('KataGo stdin error:', err.message);
+  });
 
   katagoProcess.stderr.on('data', (data) => {
     console.error(`KataGo stderr: ${data}`);
   });
 
   // Use a reasonable default search budget; the request-specific value can override it.
-  katagoProcess.stdin.write(`kata-set-param maxVisits ${DEFAULT_MAX_VISITS}\n`);
+  try {
+    writeKataGoCommand(`kata-set-param maxVisits ${DEFAULT_MAX_VISITS}`);
+  } catch (err) {
+    console.error('Failed to initialize KataGo parameters:', err.message);
+  }
 }
 
 /**
@@ -102,8 +133,18 @@ function sendGtpCommands(commands) {
     katagoProcess.stdout.on('data', onData);
 
     // Send all commands
-    for (const cmd of commands) {
-      katagoProcess.stdin.write(cmd + '\n');
+    try {
+      for (const cmd of commands) {
+        try {
+          writeKataGoCommand(cmd);
+        } catch (err) {
+          throw new Error(`Failed writing KataGo command "${cmd}": ${err.message}`);
+        }
+      }
+    } catch (err) {
+      clearTimeout(timeout);
+      katagoProcess.stdout.removeListener('data', onData);
+      return reject(err);
     }
   });
 }
