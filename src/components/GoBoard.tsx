@@ -1,23 +1,30 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { GoEngine } from "../logic/GoEngine";
+import { requestKataGoMove, gtpToBoardIndex } from "../services/katagoService";
 
-interface GoBoardProps {
-  onScoreUpdate: (blackCaptures: number, whiteCaptures: number) => void;
-}
-
-const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
+const GoBoard = () => {
   const [engine, setEngine] = useState(() => new GoEngine(19));
   const [board, setBoard] = useState(engine.board);
   const [turn, setTurn] = useState<'B' | 'W'>('B');
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
   const [gameMode, setGameMode] = useState<'PvP' | 'PvAI' | 'AIvAI'>('PvAI');
+  const [aiDifficulty, setAiDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [lastMove, setLastMove] = useState<number | null>(null);
   const [showWinnerModal, setShowWinnerModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [usingHeuristic, setUsingHeuristic] = useState(false);
+  const aiRequestToken = useRef(0);
+  const [isAiThinking, setIsAiThinking] = useState(false);
 
-  // Trigger score update when component mounts to initialize the scoreboard
-  useEffect(() => {
-    onScoreUpdate(engine.captures.B, engine.captures.W);
-  }, [engine, onScoreUpdate]);
+  const recentMoves = useMemo(() => {
+    const history = engine.moveHistory;
+    const start = Math.max(0, history.length - 5);
+    return history.slice(start).map((move, idx) => {
+      const moveNumber = start + idx + 1;
+      const player: 'B' | 'W' = moveNumber % 2 === 1 ? 'B' : 'W';
+      return { moveNumber, player, move };
+    });
+  }, [engine.moveHistory.length, board]);
 
   useEffect(() => {
     if (engine.isGameOver()) {
@@ -29,11 +36,11 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
     if (gameMode === 'AIvAI') isAITurn = true;
     if (gameMode === 'PvAI' && turn === 'W') isAITurn = true;
 
-    if (isAITurn) {
-      const timer = setTimeout(() => aiMove(turn), 600);
+    if (isAITurn && !isAiThinking) {
+      const timer = setTimeout(() => aiMove(turn), 150);
       return () => clearTimeout(timer);
     }
-  }, [turn, gameMode, board, engine]);
+  }, [turn, gameMode, board, engine, aiDifficulty, isAiThinking]);
 
   const handleClick = (i: number) => {
     if (engine.isGameOver()) return; // Bloquer les clics si c'est fini
@@ -45,30 +52,88 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
       setBoard([...engine.board]);
       setLastMove(engine.lastMoveIndex);
       setTurn(turn === 'B' ? 'W' : 'B');
-      onScoreUpdate(engine.captures.B, engine.captures.W);
     }
   };
 
-  const aiMove = (currentColor: 'B' | 'W') => {
+  const aiMove = async (currentColor: 'B' | 'W') => {
+    const requestToken = ++aiRequestToken.current;
+    setIsAiThinking(true);
+
+    try {
+      if (engine.isGameOver()) {
+        setIsAiThinking(false);
+        return;
+      }
+
+      const gtpMove = await requestKataGoMove(
+        engine.moveHistory,
+        aiDifficulty,
+        engine.size
+      );
+
+      if (requestToken !== aiRequestToken.current || engine.isGameOver()) {
+        setIsAiThinking(false);
+        return;
+      }
+
+      if (gtpMove.toUpperCase() === 'PASS') {
+        setUsingHeuristic(false);
+        engine.passTurn();
+        setTurn(currentColor === 'B' ? 'W' : 'B');
+        setIsAiThinking(false);
+        return;
+      }
+
+      // Convert GTP coordinate to board index
+      const index = gtpToBoardIndex(gtpMove, engine.size);
+
+      if (index !== -1 && engine.board[index] === null && engine.placeStone(index, currentColor)) {
+        setUsingHeuristic(false);
+        setBoard([...engine.board]);
+        setLastMove(engine.lastMoveIndex);
+        setTurn(currentColor === 'B' ? 'W' : 'B');
+        setIsAiThinking(false);
+        return;
+      }
+
+      console.warn(`[KataGo] Received invalid or illegal move: "${gtpMove}" (index: ${index}). Using heuristic fallback.`);
+    } catch (error) {
+      console.warn('[KataGo] Could not reach KataGo backend. Using heuristic fallback.', error);
+    }
+
+    if (requestToken !== aiRequestToken.current || engine.isGameOver()) {
+      setIsAiThinking(false);
+      return;
+    }
+
+    // Fallback: heuristic move selection when the backend is unavailable or illegal.
+    setUsingHeuristic(true);
     const captureMoves: number[] = [];
     const defenseMoves: number[] = [];
     const proximityMoves: number[] = [];
 
-    // Analyze board to find critical spots (groups with 1 liberty)
     for (let i = 0; i < engine.board.length; i++) {
       const color = engine.board[i];
       if (color) {
         const { liberties } = engine.getGroup(i);
         if (liberties.size === 1) {
           const criticalSpot = Array.from(liberties)[0];
-          if (color !== currentColor) captureMoves.push(criticalSpot); // Capture opponent
-          if (color === currentColor) defenseMoves.push(criticalSpot); // Save own pieces
+          if (color !== currentColor) captureMoves.push(criticalSpot);
+          if (color === currentColor) defenseMoves.push(criticalSpot);
         }
       }
     }
 
-    const emptyIndices = engine.board.map((v, i) => v === null ? i : null).filter(v => v !== null) as number[];
-    if (emptyIndices.length === 0) return;
+    const emptyIndices = engine.board
+      .map((v, i) => (v === null ? i : null))
+      .filter((v): v is number => v !== null);
+
+    if (emptyIndices.length === 0) {
+      engine.passTurn();
+      setTurn(currentColor === 'B' ? 'W' : 'B');
+      setIsAiThinking(false);
+      return;
+    }
 
     for (const idx of emptyIndices) {
       if (engine.getNeighbors(idx).some(n => engine.board[n] !== null)) {
@@ -88,23 +153,27 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
         setBoard([...engine.board]);
         setLastMove(engine.lastMoveIndex);
         setTurn(currentColor === 'B' ? 'W' : 'B');
-        onScoreUpdate(engine.captures.B, engine.captures.W);
+        setIsAiThinking(false);
         return;
       }
     }
 
-    // SI AUCUN COUP VALIDE -> L'IA PASSE
+    // No valid move found – pass the turn
     engine.passTurn();
     setTurn(currentColor === 'B' ? 'W' : 'B');
+    setIsAiThinking(false);
   };
 
   const resetGame = () => {
+    aiRequestToken.current += 1;
     const newEngine = new GoEngine(19);
     setEngine(newEngine);
     setBoard(newEngine.board);
     setTurn('B');
     setLastMove(null);
     setShowWinnerModal(false);
+    setUsingHeuristic(false);
+    setIsAiThinking(false);
   };
 
   const closeModal = () => {
@@ -122,6 +191,14 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
   };
 
   const finalScore = useMemo(() => engine.isGameOver() ? engine.computeScore() : null, [engine.isGameOver(), board]);
+  const columnLabels = useMemo(
+    () => Array.from({ length: engine.size }, (_, x) => String.fromCharCode(65 + (x >= 8 ? x + 1 : x))),
+    [engine.size]
+  );
+  const rowLabels = useMemo(
+    () => Array.from({ length: engine.size }, (_, y) => engine.size - y),
+    [engine.size]
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '40px', width: '100%', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -140,12 +217,12 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
         <button 
           onClick={resetGame}
           style={{ 
-            padding: '10px 25px', background: 'rgba(97, 239, 68, 0.1)', border: '1px solid rgba(125, 239, 68, 0.3)', 
+            padding: '10px 25px', background: 'rgba(97, 239, 68, 0.07)', border: '1px solid rgba(125, 239, 68, 0.3)', 
             color: '#c3fca5', cursor: 'pointer', fontSize: '1rem', fontWeight: '500', borderRadius: '30px',
             transition: 'all 0.2s ease-in-out'
           }}
-          onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-          onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(97, 239, 68, 0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+          onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(97, 239, 68, 0.07)'; e.currentTarget.style.transform = 'translateY(0)'; }}
         >
           New Game
         </button>
@@ -181,12 +258,15 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
         <select
           value={gameMode}
           onChange={(e) => {
+            aiRequestToken.current += 1;
             setGameMode(e.target.value as any);
             const newEngine = new GoEngine(19);
             setEngine(newEngine);
             setBoard(newEngine.board);
             setTurn('B');
             setLastMove(null);
+            setUsingHeuristic(false);
+            setIsAiThinking(false);
           }}
           style={{
             padding: '10px 15px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -197,7 +277,49 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
           <option value="PvAI" style={{ background: '#222' }}>🤖 Player vs AI</option>
           <option value="AIvAI" style={{ background: '#222' }}>🖥️ AI vs AI</option>
         </select>
+
+        <select
+          value={aiDifficulty}
+          onChange={(e) => setAiDifficulty(e.target.value as 'easy' | 'medium' | 'hard')}
+          style={{
+            padding: '10px 15px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
+            color: '#e5e5e5', fontSize: '1rem', fontWeight: '500', borderRadius: '30px', outline: 'none', cursor: 'pointer'
+          }}
+        >
+          <option value="easy" style={{ background: '#222' }}>⚡ Easy</option>
+          <option value="medium" style={{ background: '#222' }}>🎯 Medium</option>
+          <option value="hard" style={{ background: '#222' }}>♟️ Hard</option>
+        </select>
+
+        <button
+          onClick={() => setShowRulesModal(true)}
+          style={{
+            padding: '10px 20px', background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.35)',
+            color: '#fde68a', cursor: 'pointer', fontSize: '1rem', fontWeight: '600', borderRadius: '30px',
+            transition: 'all 0.2s ease-in-out'
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(234, 179, 8, 0.2)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+          onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(234, 179, 8, 0.12)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        >
+          Rules
+        </button>
       </div>
+
+      {/* HEURISTIC FALLBACK NOTICE */}
+      {usingHeuristic && (gameMode === 'PvAI' || gameMode === 'AIvAI') && (
+        <div style={{
+          padding: '10px 20px',
+          background: 'rgba(234, 179, 8, 0.12)',
+          border: '1px solid rgba(234, 179, 8, 0.4)',
+          borderRadius: '12px',
+          color: '#fde68a',
+          fontSize: '0.95rem',
+          textAlign: 'center',
+          maxWidth: '600px'
+        }}>
+          ⚠️ KataGo AI is unavailable — the AI is currently using a heuristic fallback strategy.
+        </div>
+      )}
 
       {/* WINNER POPUP MODAL */}
       {showWinnerModal && finalScore && (
@@ -248,23 +370,95 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
         </div>
       )}
 
+      {showRulesModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0, 0, 0, 0.72)',
+          display: 'flex', justifyContent: 'space-evenly', alignItems: 'center',
+          zIndex: 9999, backdropFilter: 'blur(5px)'
+        }}>
+          <div style={{
+            background: '#141414', padding: '32px', borderRadius: '18px',
+            border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+            width: 'min(800px, 92vw)', color: '#e8e8e8', display: 'flex', flexDirection: 'column', gap: '14px'
+          }}>
+            <h2 style={{ margin: 0, color: '#fad561' }}>Go Rules (Quick)</h2>
+            <p style={{ margin: 0, color: '#cfcfcf', lineHeight: 1.6 }}>
+              <span style={{ textDecoration: 'underline' }}>The Goal:</span> Conquer more territory than your opponent by using your stones to create barriers.
+            </p>
+            <p style={{ margin: 0, color: '#cfcfcf', lineHeight: 1.6 }}>
+              <span style={{ textDecoration: 'underline' }}>Turns:</span> Black starts. Place one stone on any line crossing. Stones never move once placed.
+            </p>
+            <p style={{ margin: 0, color: '#cfcfcf', lineHeight: 1.6 }}>
+              <span style={{ textDecoration: 'underline' }}>Capturing:</span> Surround an enemy stone on all 4 sides (up, down, left, right) to remove it. Diagonals do not count!
+            </p>
+            <p style={{ margin: 0, color: '#cfcfcf', lineHeight: 1.6 }}>
+              <span style={{ textDecoration: 'underline' }}>The Ko Rule:</span> You cannot immediately repeat the exact same board position.
+            </p>
+            <p style={{ margin: 0, color: '#cfcfcf', lineHeight: 1.6 }}>
+              <span style={{ textDecoration: 'underline' }}>Game End:</span> The game ends if a player resigns or if both players Pass their turn.
+            </p>
+            <p style={{ margin: 0, color: '#cfcfcf', lineHeight: 1.6 }}>
+              <span style={{ textDecoration: 'underline' }}>Winning:</span> Count your surrounded empty points and your captures. The highest score wins!
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button
+                onClick={() => setShowRulesModal(false)}
+                style={{
+                  padding: '10px 22px', background: '#3b82f6', color: '#fff', border: 'none',
+                  borderRadius: '30px', cursor: 'pointer', fontSize: '0.95rem', fontWeight: '600'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ZONE DE JEU (Plateau + Panneau Latéral) */}
       <div style={{ display: 'flex', gap: '50px', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         
         {/* PLATEAU */}
-        <div style={{ 
-          display: 'inline-block', 
-          background: '#fad561', 
-          border: '12px solid #5c3a21', // Contour plus large type bois
-          borderRadius: '4px', // Bords légèrement arrondis
-          padding: '20px', 
-          boxShadow: 'inset 0 0 15px rgba(0,0,0,0.3), 0px 15px 35px rgba(0,0,0,0.5)', // Ombre interne (inset) et externe pour 3D
-          borderTopColor: '#7a5135',
-          borderLeftColor: '#6e452a',
-          borderRightColor: '#4f301b',
-          borderBottomColor: '#3a2212' // L'effet de lumière sur les 4 bordures boisées
-        }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(19, 30px)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '20px auto', alignItems: 'center', columnGap: '6px' }}>
+            <div />
+            <div style={{ display: 'grid', gridTemplateColumns: '32px repeat(19, 30px) 32px', alignItems: 'center' }}>
+              <div />
+              {columnLabels.map((label) => (
+                <div key={`top-${label}`} style={{ textAlign: 'center', color: '#f5e7be', fontWeight: 700, fontSize: '12px' }}>
+                  {label}
+                </div>
+              ))}
+              <div />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '20px auto', alignItems: 'stretch', columnGap: '6px' }}>
+            <div style={{ display: 'grid', gridTemplateRows: '32px repeat(19, 30px) 32px' }}>
+              <div />
+              {rowLabels.map((label) => (
+                <div key={`left-${label}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f5e7be', fontWeight: 700, fontSize: '12px' }}>
+                  {label}
+                </div>
+              ))}
+              <div />
+            </div>
+
+            <div style={{ 
+              display: 'inline-block', 
+              background: '#fad561', 
+              border: '12px solid #5c3a21', // Contour plus large type bois
+              borderRadius: '4px', // Bords légèrement arrondis
+              padding: '20px', 
+              boxShadow: 'inset 0 0 15px rgba(0,0,0,0.3), 0px 15px 35px rgba(0,0,0,0.5)', // Ombre interne (inset) et externe pour 3D
+              borderTopColor: '#7a5135',
+              borderLeftColor: '#6e452a',
+              borderRightColor: '#4f301b',
+              borderBottomColor: '#3a2212' // L'effet de lumière sur les 4 bordures boisées
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(19, 30px)' }}>
         {board.map((cell, i) => {
           const x = i % 19;
           const y = Math.floor(i / 19);
@@ -286,13 +480,13 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
               {/* Ligne horizontale */}
               <div style={{ 
                 position: 'absolute', top: '14px', height: '1px', background: '#000', 
-                left: x === 0 ? '14px' : '0', right: x === 18 ? '14px' : '0', zIndex: 1 
+                left: x === 0 ? '14px' : '0', right: x === engine.size - 1 ? '14px' : '0', zIndex: 1 
               }} />
               
               {/* Ligne verticale */}
               <div style={{ 
                 position: 'absolute', left: '14px', width: '1px', background: '#000', 
-                top: y === 0 ? '14px' : '0', bottom: y === 18 ? '14px' : '0', zIndex: 1 
+                top: y === 0 ? '14px' : '0', bottom: y === engine.size - 1 ? '14px' : '0', zIndex: 1 
               }} />
 
               {/* Point noir (Hoshi) */}
@@ -342,8 +536,10 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
             </div>
           );
         })}
-      </div>
-      </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
       {/* PANNEAU LATÉRAL HYPER-MODERN (Score + Tour) */}
       <div style={{
@@ -425,6 +621,44 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
           </div>
           )}
 
+          <div style={{
+            padding: '20px',
+            background: 'linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.3) 100%)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: '16px',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
+          }}>
+            <h3 style={{ color: '#ccc', margin: '0 0 14px 0', fontSize: '0.85rem', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '3px', fontWeight: '500' }}>
+              Last 5 Moves
+            </h3>
+            {recentMoves.length === 0 && (
+              <div style={{ color: '#9ca3af', textAlign: 'center', fontSize: '0.95rem' }}>No moves yet</div>
+            )}
+            {recentMoves.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {[...recentMoves].reverse().map((entry) => (
+                  <div
+                    key={entry.moveNumber}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      borderRadius: '10px',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: '#ddd',
+                      fontSize: '0.95rem'
+                    }}
+                  >
+                    <span>#{entry.moveNumber} {entry.player}</span>
+                    <span style={{ fontWeight: 600 }}>{entry.move}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* RÉSULTAT FINAL (COMPTE AREA SCORING & KOMI) */}
           {engine.isGameOver() && finalScore && (
           <div style={{ 
@@ -439,31 +673,54 @@ const GoBoard: React.FC<GoBoardProps> = ({ onScoreUpdate }) => {
             <h3 style={{ color: '#6ee7b7', margin: '0 0 20px 0', fontSize: '0.85rem', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '3px', fontWeight: '500' }}>
               Final Area Score
             </h3>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', rowGap: '12px', columnGap: '12px', alignItems: 'center' }}>
               <span style={{ color: '#ccc', fontSize: '1rem' }}>Black (Area)</span>
-              <span style={{ color: finalScore.blackArea > finalScore.whiteArea ? '#fff' : '#aaa', fontSize: '1.4rem', fontWeight: '600' }}>
+              <span style={{ color: finalScore.blackArea > finalScore.whiteArea ? '#fff' : '#aaa', fontSize: '1.4rem', fontWeight: '600', textAlign: 'right' }}>
                 {finalScore.blackArea} pts
               </span>
-            </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
               <span style={{ color: '#ccc', fontSize: '1rem' }}>White (Area)</span>
-              <span style={{ color: finalScore.whiteArea > finalScore.blackArea ? '#fff' : '#aaa', fontSize: '1.4rem', fontWeight: '600' }}>
+              <span style={{ color: finalScore.whiteArea > finalScore.blackArea ? '#fff' : '#aaa', fontSize: '1.4rem', fontWeight: '600', textAlign: 'right' }}>
                 {finalScore.whiteArea - engine.komi} pts
               </span>
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', color: '#999', fontSize: '0.85rem' }}>
-              <span>+ Komi</span>
-              <span>{engine.komi} pts</span>
+
+              <span style={{ color: '#999', fontSize: '0.9rem' }}>+ Komi</span>
+              <span style={{ color: '#cfcfcf', fontSize: '0.9rem', textAlign: 'right' }}>{engine.komi} pts</span>
             </div>
 
             <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '15px 0' }} />
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '1.1rem', fontWeight: 'bold' }}>
-              <span style={{ color: '#fff' }}>TOTAL WHITE</span>
-              <span style={{ color: finalScore.whiteArea > finalScore.blackArea ? '#6ee7b7' : '#fff' }}>{finalScore.whiteArea} pts</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '10px',
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px'
+              }}>
+                <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 700 }}>TOTAL WHITE</span>
+                <span style={{ color: finalScore.whiteArea > finalScore.blackArea ? '#6ee7b7' : '#fff', fontSize: '1.5rem', fontWeight: 700 }}>
+                  {finalScore.whiteArea} pts
+                </span>
+              </div>
+
+              <div style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '10px',
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px'
+              }}>
+                <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 700 }}>TOTAL BLACK</span>
+                <span style={{ color: finalScore.blackArea > finalScore.whiteArea ? '#6ee7b7' : '#fff', fontSize: '1.5rem', fontWeight: 700 }}>
+                  {finalScore.blackArea} pts
+                </span>
+              </div>
             </div>
           </div>
           )}

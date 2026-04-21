@@ -1,31 +1,18 @@
-services:
-  frontend:
-    # Pulls the image directly from your GitHub Container Registry
-    image: ghcr.io/jeroneo/project-4:latest
-    container_name: project-4-app
-    restart: unless-stopped
-    networks:
-      - traefik-public
-    labels:
-      - "traefik.enable=true"
-      
-      # --- HTTP Router (Port 80) & HTTPS Redirect ---
-      - "traefik.http.routers.katago-http.rule=Host(`go.yepapp.org`)"
-      - "traefik.http.routers.katago-http.entrypoints=web"
-      - "traefik.http.middlewares.katago-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.katago-https-redirect.redirectscheme.permanent=true"
-      - "traefik.http.routers.katago-http.middlewares=katago-https-redirect"
-      
-      # --- HTTPS Router (Port 443) ---
-      - "traefik.http.routers.katago-https.rule=Host(`go.yepapp.org`)"
-      - "traefik.http.routers.katago-https.entrypoints=websecure"
-      - "traefik.http.routers.katago-https.tls=true"
-      - "traefik.http.routers.katago-https.tls.certresolver=cloudflare"
-      
-      # --- Internal Routing ---
-      # CHANGED TO 80: Nginx (from the Dockerfile) serves on port 80.
-      - "traefik.http.services.katago.loadbalancer.server.port=80"
+version: '3.8'
 
-networks:
-  traefik-public:
-    external: true
+services:
+  go-ai-server:
+    build: .
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    # If your laptop or server has a GPU, you can enable it below, but for now it uses the CPU
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
