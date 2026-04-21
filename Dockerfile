@@ -22,7 +22,8 @@ RUN apt-get update && apt-get install -y wget unzip libgomp1 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Download KataGo (Eigen version for broad CPU compatibility without needing GPU drivers)
-RUN wget https://github.com/lightvector/KataGo/releases/download/v1.15.3/katago-v1.15.3-eigen-linux-x64.zip -O katago.zip \
+# v1.16.3 binary is statically linked, avoiding missing shared-lib issues (libzip/libssl) in Debian images.
+RUN wget https://github.com/lightvector/KataGo/releases/download/v1.16.3/katago-v1.16.3-eigen-linux-x64.zip -O katago.zip \
     && unzip katago.zip -d /app/katago_dir \
     && rm katago.zip \
     && chmod +x /app/katago_dir/katago
