@@ -3,6 +3,8 @@
 const KATAGO_BACKEND_URL =
   (import.meta as unknown as { env: Record<string, string> }).env
     .VITE_KATAGO_BACKEND_URL ?? 'http://localhost:8000';
+// Supports both a backend host (e.g. http://localhost:8000) and a proxied base
+// path (e.g. /api when running frontend in Docker Compose).
 const MOVE_ENDPOINT = KATAGO_BACKEND_URL.endsWith('/api')
   ? `${KATAGO_BACKEND_URL}/move`
   : `${KATAGO_BACKEND_URL}/api/move`;
