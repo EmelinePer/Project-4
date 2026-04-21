@@ -16,6 +16,10 @@ FROM node:20-bookworm AS backend
 
 WORKDIR /app
 
+# Allow AppImage binaries (like current KataGo release packaging) to run in
+# container environments where FUSE is unavailable.
+ENV APPIMAGE_EXTRACT_AND_RUN=1
+
 # Install required dependencies for KataGo runtime.
 RUN apt-get update && apt-get install -y wget unzip libgomp1 ca-certificates \
     && (apt-get install -y libzip5 || apt-get install -y libzip4) \
