@@ -1,18 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const proxyTarget = process.env.VITE_KATAGO_PROXY_TARGET || 'http://localhost:8000'
-
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
-    allowedHosts: ['go-to-win.yepapp.org'],
-    proxy: {
-      '/api': {
-        target: proxyTarget,
-        changeOrigin: true,
-      },
-    },
+    // Allow any host so the Vite dev server is reachable from the nginx
+    // reverse proxy container as well as directly (localhost, VPS domain, IP).
+    allowedHosts: true,
   },
 })
