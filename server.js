@@ -33,9 +33,17 @@ function isKataGoWritable() {
   );
 }
 
+function getKataGoStdinState() {
+  if (!katagoProcess) return 'process_not_initialized';
+  if (!katagoProcess.stdin) return 'stdin_missing';
+  if (katagoProcess.stdin.destroyed) return 'stdin_destroyed';
+  if (!katagoProcess.stdin.writable) return 'stdin_not_writable';
+  return 'writable';
+}
+
 function writeKataGoCommand(command) {
   if (!isKataGoWritable()) {
-    throw new Error('KataGo stdin is not writable');
+    throw new Error(`KataGo stdin is not writable (${getKataGoStdinState()})`);
   }
   katagoProcess.stdin.write(`${command}\n`);
 }
@@ -127,7 +135,11 @@ function sendGtpCommands(commands) {
     // Send all commands
     try {
       for (const cmd of commands) {
-        writeKataGoCommand(cmd);
+        try {
+          writeKataGoCommand(cmd);
+        } catch (err) {
+          throw new Error(`Failed writing KataGo command "${cmd}": ${err.message}`);
+        }
       }
     } catch (err) {
       clearTimeout(timeout);
