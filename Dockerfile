@@ -18,7 +18,7 @@ WORKDIR /app
 
 # Install required dependencies for KataGo runtime.
 RUN apt-get update && apt-get install -y wget unzip libgomp1 ca-certificates \
-    && (apt-get install -y libzip5 || apt-get install -y libzip4 || apt-get install -y libzip-dev) \
+    && (apt-get install -y libzip5 || apt-get install -y libzip4) \
     && rm -rf /var/lib/apt/lists/*
 
 # Download KataGo (Eigen version for broad CPU compatibility without needing GPU drivers)
