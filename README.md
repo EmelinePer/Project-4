@@ -42,15 +42,20 @@ Open your browser and visit the local URL provided by Vite (usually `http://loca
 
 The AI opponent uses the **KataGo** engine via a backend server. You can run it using Docker (recommended) or manually.
 
-### Option 1 – Docker (Recommended)
+### Option 1 – Docker Compose (Frontend + KataGo Backend)
 
 Make sure you have [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/) installed.
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
-This starts the Node.js KataGo server on **port 8000**.
+This starts:
+
+* Frontend Vite dev server (`npm run dev`) on **port 5173**
+* Node.js KataGo backend on **port 8000**
+
+Open `http://localhost:5173` in your browser.
 
 The server now accepts optional environment variables to tune strength and speed:
 
@@ -93,10 +98,11 @@ Copy `.env.example` to `.env.local` and set the backend URL:
 cp .env.example .env.local
 ```
 
-Edit `.env.local`:
+Edit `.env.local` (for local non-Docker frontend dev):
 
 ```env
 VITE_KATAGO_BACKEND_URL=http://localhost:8000
+VITE_KATAGO_PROXY_TARGET=http://localhost:8000
 ```
 
 The frontend will automatically use the configured URL when requesting AI moves.

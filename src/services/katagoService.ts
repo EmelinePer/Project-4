@@ -3,6 +3,12 @@
 const KATAGO_BACKEND_URL =
   (import.meta as unknown as { env: Record<string, string> }).env
     .VITE_KATAGO_BACKEND_URL ?? 'http://localhost:8000';
+// Supports both a backend host (e.g. http://localhost:8000) and a proxied base
+// path (e.g. /api when running frontend in Docker Compose).
+const NORMALIZED_BACKEND_URL = KATAGO_BACKEND_URL.replace(/\/+$/, '');
+const MOVE_ENDPOINT = NORMALIZED_BACKEND_URL.endsWith('/api')
+  ? `${NORMALIZED_BACKEND_URL}/move`
+  : `${NORMALIZED_BACKEND_URL}/api/move`;
 
 /**
  * Converts a GTP coordinate string to a board index (e.g., "A19" → 0).
@@ -49,7 +55,7 @@ export async function requestKataGoMove(
 ): Promise<string> {
   console.log(`[KataGo] Requesting move (history length: ${history.length}, difficulty: ${difficulty})`);
 
-  const response = await fetch(`${KATAGO_BACKEND_URL}/api/move`, {
+  const response = await fetch(MOVE_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ history, difficulty, board_size: boardSize })

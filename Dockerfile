@@ -1,17 +1,23 @@
-FROM node:20-bookworm
+FROM node:20-bookworm AS frontend-dev
 
 WORKDIR /app
 
-# Install required dependencies
-RUN apt-get update && apt-get install -y wget curl unzip libzip-dev zlib1g libgomp1 \
-    && wget -q http://mirrors.kernel.org/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb \
-    && apt-get update \
-    && apt-get install -y ./libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb \
-    && rm libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb \
-    && wget -q http://mirrors.kernel.org/ubuntu/pool/universe/libz/libzip/libzip5_1.5.1-0ubuntu1_amd64.deb \
-    && apt-get update \
-    && apt-get install -y ./libzip5_1.5.1-0ubuntu1_amd64.deb \
-    && rm libzip5_1.5.1-0ubuntu1_amd64.deb \
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+EXPOSE 5173
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+
+
+FROM node:20-bookworm AS backend
+
+WORKDIR /app
+
+# Install required dependencies for KataGo runtime.
+RUN apt-get update && apt-get install -y wget unzip libgomp1 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Download KataGo (Eigen version for broad CPU compatibility without needing GPU drivers)
@@ -20,12 +26,11 @@ RUN wget https://github.com/lightvector/KataGo/releases/download/v1.15.3/katago-
     && rm katago.zip \
     && chmod +x /app/katago_dir/katago
 
-# Download a lightweight KataGo Neural Network model from GitHub directly to avoid CloudFlare 403 blocks
+# Download a lightweight KataGo Neural Network model
 RUN mkdir -p /app/models \
     && wget https://github.com/lightvector/KataGo/releases/download/v1.12.4/b18c384nbt-uec.bin.gz -O /app/models/model.bin.gz
 
 # Create a minimal GTP config so KataGo can start without crashing.
-# All unset parameters use KataGo's built-in defaults.
 RUN echo "logAllGTPCommunication = false\n\
 logSearchInfo = false\n\
 numSearchThreads = 4\n\
@@ -35,11 +40,9 @@ scoringRule = AREA\n\
 taxRule = NONE\n\
 multiStoneSuicideLegal = false\n" > gtp_config.cfg
 
-# Copy package info and install the backend dependencies
 COPY package*.json ./
-RUN npm install express cors
+RUN npm ci --omit=dev
 
-# Copy the server file
 COPY server.js ./
 
 EXPOSE 8000

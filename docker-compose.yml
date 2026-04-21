@@ -1,18 +1,23 @@
-version: '3.8'
-
 services:
-  go-ai-server:
-    build: .
+  frontend:
+    build:
+      context: .
+      target: frontend-dev
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_KATAGO_BACKEND_URL=/api
+      - VITE_KATAGO_PROXY_TARGET=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      target: backend
     ports:
       - "8000:8000"
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-    # If your laptop or server has a GPU, you can enable it below, but for now it uses the CPU
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
